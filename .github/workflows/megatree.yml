@@ -60,16 +60,14 @@ jobs:
 
       - name: Run MegaTree
         run: |
-          python3 run-megatree.py all /tmp/dump \
-            --recovery "${{ github.event.inputs.recovery_type }}" \
-            --release /tmp/release
+          python3 run-megatree.py all /tmp/dump --recovery "${{ github.event.inputs.recovery_type }}" --release /tmp/release
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: megatree-output
           path: /tmp/release/*.zip
-          
+
       - name: Create GitHub Release
         if: github.event.inputs.create_release == 'true'
         run: |
