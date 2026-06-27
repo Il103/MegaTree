@@ -1,10 +1,10 @@
 import os, glob, shutil, re
 
 RECOVERY_TYPES = {
-    "twrp": {"file": "twrp.mk", "name": "TWRP", "fstab": "recovery.fstab"},
+    "twrp": {"file": "twrp_{{CODENAME}}.mk", "name": "TWRP", "fstab": "recovery.fstab"},
     "ofox": {"file": "ofox_{{CODENAME}}.mk", "name": "OrangeFox", "fstab": "recovery.fstab"},
-    "shrp": {"file": "shrp.mk", "name": "SHRP", "fstab": "recovery.fstab"},
-    "pbrp": {"file": "pbrp.mk", "name": "PBRP", "fstab": "recovery.fstab"},
+    "shrp": {"file": "shrp_{{CODENAME}}.mk", "name": "SHRP", "fstab": "recovery.fstab"},
+    "pbrp": {"file": "pbrp_{{CODENAME}}.mk", "name": "PBRP", "fstab": "recovery.fstab"},
 }
 
 PLATFORM_GPUS = {
