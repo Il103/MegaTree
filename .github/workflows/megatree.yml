@@ -1,0 +1,77 @@
+name: MegaTree - Ultimate Device Tree Generator
+
+on:
+  workflow_dispatch:
+    inputs:
+      dump_url:
+        description: "ROM dump URL (direct link or Git repo)"
+        required: true
+        type: string
+      recovery_type:
+        description: "Recovery tree type"
+        required: false
+        default: "twrp"
+        type: choice
+        options: ["twrp", "ofox", "shrp", "pbrp"]
+      create_release:
+        description: "Create release zip"
+        required: false
+        default: "true"
+        type: choice
+        options: ["true", "false"]
+
+jobs:
+  megatree:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/.ghcup
+          sudo apt-get clean -qq || true
+          df -h /
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends python3 git curl wget unzip xz-utils erofs-utils e2fsprogs f2fs-tools squashfs-tools device-tree-compiler android-sdk-libsparse-utils p7zip-full brotli liblz4-tool
+
+      - name: Download dump
+        run: |
+          mkdir -p /tmp/dump
+          URL="${{ github.event.inputs.dump_url }}"
+          echo "Downloading from: $URL"
+          if echo "$URL" | grep -qE '^(https?://|git@)'; then
+            wget -q -O /tmp/dump/rom.zip "$URL" 2>/dev/null || git clone --depth=1 "$URL" /tmp/dump 2>/dev/null || true
+            if [ -f /tmp/dump/rom.zip ]; then
+              cd /tmp/dump && unzip -o rom.zip 2>/dev/null || true
+            fi
+          else
+            echo "Invalid URL"
+            exit 1
+          fi
+          echo "Dump files: $(find /tmp/dump -type f | wc -l)"
+
+      - name: Run MegaTree
+        run: |
+          python3 run-megatree.py all /tmp/dump \
+            --recovery "${{ github.event.inputs.recovery_type }}" \
+            --release /tmp/release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: megatree-output
+          path: /tmp/release/*.zip
+          
+      - name: Create GitHub Release
+        if: github.event.inputs.create_release == 'true'
+        run: |
+          TAG="megatree-$(date +%Y%m%d-%H%M%S)"
+          gh release create "$TAG" /tmp/release/*.zip --title "MegaTree $TAG" --notes "Generated from: ${{ github.event.inputs.dump_url }}"
