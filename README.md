@@ -1,86 +1,85 @@
-# MegaTree 🔥
+# MegaTree 🚀
 
-**Ultimate Device Tree Generator from Stock ROM Dumps**
+**MegaTree** — أداة لبناء **شجرة ريكفري** (TWRP/OrangeFox/SHRP/PBRP) تلقائيًا من أي ROM dump.  
+بتشتغل على **أي جهاز** (MTK/Qualcomm/Exynos)، بتستخرج كل حاجة من dump حقيقي — مفيش values مفبركة.
 
-MegaTree takes any Android stock ROM dump and automatically generates complete, production-ready device trees, recovery trees (TWRP/OrangeFox/SHRP/PBRP), and vendor trees.
+## اللي بتعمله
 
-## Features
-
-- **Universal**: Works with any Android device (old or new)
-- **Smart Extraction**: erofs → ext4 → sparse → raw (auto-detects)
-- **Real Data**: Reads everything from the actual dump — never fabricates values
-- **Correct Codenames**: Gets device codename from build.prop automatically
-- **DTB Scanner**: Finds and decompiles all DTBs from boot images
-- **Multiple Recovery Types**: TWRP, OrangeFox (`ofox_CODENAME.mk`), SHRP, PBRP
-- **Full Validation**: Validates fstab, kernel, partitions, props
-- **Release Zip**: Packages everything into a ready-to-use zip
-
-## Usage
-
-### Via GitHub Actions (recommended)
-
-1. Go to **Actions** tab
-2. Select **MegaTree - Ultimate Device Tree Generator**
-3. Click **Run workflow**
-4. Enter your ROM dump URL (Git repo or direct download link)
-5. Choose recovery type
-6. Wait for completion — download the artifact or release
-
-### Local Usage
-
-```bash
-# Clone
-git clone https://github.com/Il103/MegaTree.git
-cd MegaTree
-
-# Full pipeline
-python3 run-megatree.py all /path/to/dump --recovery twrp --release ./output
-
-# Generate trees only
-python3 run-megatree.py generate /path/to/dump --recovery ofox
-
-# Analyze a dump
-python3 run-megatree.py analyze /path/to/dump --json
-
-# Validate dump
-python3 run-megatree.py validate /path/to/dump
+```
+MegaTree
+├── analyze.py     ← يقرأ build.prop + boot.img headers
+├── bootimg.py     ← يفك boot.img (v0–v4)
+├── extract.py     ← يستخرج partitions (erofs, ext4, spars)
+├── dtb.py         ← يمسح DTBs من boot images
+├── trees/
+│   └── recovery.py ← يولد BoardConfig.mk + fstab + init + makefiles + prebuilt kernel/DTB
+├── validate.py    ← يتأكد إن كل حاجة صح
+├── release.py     ← يعمل ZIP جاهز
+└── utils.py       ← أدوات مساعدة
 ```
 
-### Recovery Types
+## الأنواع المدعومة
 
-| Type | Command | Output File |
-|------|---------|-------------|
-| TWRP | `--recovery twrp` | `twrp.mk` |
-| OrangeFox | `--recovery ofox` | `ofox_CODENAME.mk` |
-| SHRP | `--recovery shrp` | `shrp.mk` |
-| PBRP | `--recovery pbrp` | `pbrp.mk` |
+| Recovery | اسم الملف |
+|----------|-----------|
+| TWRP | `twrp.mk` |
+| OrangeFox | `ofox_CODENAME.mk` |
+| SHRP | `shrp.mk` |
+| PBRP | `pbrp.mk` |
 
-## Output Structure
+## الاستخدام
+
+### سطر الأوامر
+
+```bash
+# تحليل dump
+python3 -m megatree analyze /path/to/dump
+
+# شجرة ريكفري
+python3 -m megatree generate /path/to/dump -r twrp
+
+# كل حاجة: تحليل + استخراج + DTB + توليد
+python3 -m megatree all /path/to/dump -r ofox --force-extract --release
+
+# تحميل dump من URL
+python3 -m megatree download https://example.com/dump.zip
+```
+
+### GitHub Action
+
+1. روح لـ `Actions` > `MegaTree - Recovery Tree Generator`
+2. اختار `Run workflow`
+3. حط:
+   - `dump_url`: رابط الـ dump (Git repo, ZIP, gofile.io)
+   - `recovery_type`: twrp / ofox / shrp / pbrp
+4. الـ Action بيحمل الـ dump ويستخرج ويبني الشجرة ويرفعها `artifact` و release
+
+## مخرجات الشجرة
 
 ```
 megatree-output/
-├── device_tree/          # BoardConfig.mk, device.mk, props, rootdir
-│   ├── BoardConfig.mk
-│   ├── device.mk
-│   ├── AndroidProducts.mk
-│   ├── system.prop / vendor.prop / product.prop
-│   ├── manifest.xml
-│   ├── extract-files.py / setup-makefiles.py
-│   └── rootdir/etc/      # fstab + all init .rc files
-├── recovery/             # Recovery tree
-│   ├── twrp.mk / ofox_CODENAME.mk
-│   ├── twrp.fstab
-│   ├── init.recovery.rc
-│   └── *.rc              # All device init scripts
-└── vendor/               # Vendor tree
-    ├── proprietary-files.txt
-    ├── BoardConfigVendor.mk
-    └── CODENAME-vendor.mk
+└── manufacturer-codename/
+    └── recovery/
+        ├── BoardConfig.mk         ← البورد كونفيج (مع kernel/cmdline الحقيقي)
+        ├── twrp.mk / ofox_CODENAME.mk ← makefile الريكفري
+        ├── recovery.fstab         ← الفstab الحقيقي من الجهاز
+        ├── init.recovery.rc       ← init scripts
+        ├── system.prop / vendor.prop ← البروبس
+        ├── manifest.xml           ← VINTF manifest
+        ├── prebuilt/
+        │   ├── kernel             ← kernel من boot.img
+        │   ├── dtb.img            ← DTB مدمج
+        │   └── dtbo.img           ← DTBO
+        └── Android.mk
 ```
 
-## Requirements
+## ازاي تشتغل؟
 
-- Python 3.8+
-- `erofs-utils`, `e2fsprogs`, `f2fs-tools`, `squashfs-tools`
-- `device-tree-compiler` (dtc)
-- `android-sdk-libsparse-utils` (simg2img)
+1. **كل حاجة من الـ dump الحقيقي**: boot.img header (base/pagesize/cmdline)، fstab، kernel، init scripts
+2. **شغالة على أي منصة**: بتكتشف MTK من kernel bytes، وكمان Qualcomm و Exynos
+3. **Multi-input**: تقدر تدخل ZIP URL, Git repo, gofile.io, أو حتى روابط files فردية
+4. **جاهزة للبناء**: الـ BoardConfig.mk شغالة 100% مع الـ AOSP tree
+
+## License
+
+MIT
