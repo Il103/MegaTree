@@ -42,7 +42,7 @@ jobs:
           sudo apt-get install -y -qq \
             git python3-pip python3-venv \
             cpio lz4 zstd brotli unzip xz-utils \
-            simg2img e2fsprogs \
+            android-simg2img e2fsprogs \
             device-tree-compiler erofs-utils
           pip3 install --quiet pycryptodome
 
