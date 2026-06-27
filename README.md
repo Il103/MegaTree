@@ -43,7 +43,7 @@ No manual BoardConfig tweaks. No guessing kernel base or cmdline. **Everything c
 📁 megatree-output/manufacturer-codename/
 └── 📁 recovery/
     ├── 📄 BoardConfig.mk          ← Kernel base, pagesize, cmdline from actual boot.img
-    ├── 📄 twrp_X6886.mk           ← Recovery makefile (codename appended)
+    ├── 📄 twrp_{{CODENAME}}.mk    ← Recovery makefile (codename appended)
     ├── 📄 recovery.fstab           ← Real device fstab
     ├── 📄 init.recovery.rc         ← Init scripts
     ├── 📄 system.prop              ← Device properties
