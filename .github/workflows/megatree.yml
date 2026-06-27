@@ -1,75 +1,107 @@
-name: MegaTree - Ultimate Device Tree Generator
+name: MegaTree - Recovery Tree Generator
 
 on:
   workflow_dispatch:
     inputs:
       dump_url:
-        description: "ROM dump URL (direct link or Git repo)"
+        description: 'ROM dump URL (Git repo, ZIP, or gofile.io)'
         required: true
-        type: string
+      dump_branch:
+        description: 'Branch name for git repos (optional)'
+        required: false
+        default: ''
       recovery_type:
-        description: "Recovery tree type"
-        required: false
-        default: "twrp"
+        description: 'Recovery type'
+        required: true
+        default: 'twrp'
         type: choice
-        options: ["twrp", "ofox", "shrp", "pbrp"]
+        options: [twrp, ofox, shrp, pbrp]
       create_release:
-        description: "Create release zip"
-        required: false
-        default: "true"
-        type: choice
-        options: ["true", "false"]
+        description: 'Create GitHub Release'
+        required: true
+        default: true
+        type: boolean
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
-  megatree:
+  generate:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      actions: write
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Free disk space
+      - name: Maximize disk space
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/.ghcup
-          sudo apt-get clean -qq || true
-          df -h /
+          sudo swapoff -a
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
+          sudo apt-get clean
+          df -h
 
       - name: Install dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends python3 git curl wget unzip xz-utils erofs-utils e2fsprogs f2fs-tools squashfs-tools device-tree-compiler android-sdk-libsparse-utils p7zip-full brotli liblz4-tool
+          sudo apt-get install -y -qq \
+            git python3-pip python3-venv \
+            cpio lz4 zstd brotli unzip xz-utils \
+            simg2img e2fsprogs \
+            device-tree-compiler erofs-utils
+          pip3 install --quiet pycryptodome
+
+      - name: Check out MegaTree
+        uses: actions/checkout@v4
 
       - name: Download dump
+        id: download
         run: |
-          mkdir -p /tmp/dump
           URL="${{ github.event.inputs.dump_url }}"
-          echo "Downloading from: $URL"
-          if echo "$URL" | grep -qE '^(https?://|git@)'; then
-            wget -q -O /tmp/dump/rom.zip "$URL" 2>/dev/null || git clone --depth=1 "$URL" /tmp/dump 2>/dev/null || true
-            if [ -f /tmp/dump/rom.zip ]; then
-              cd /tmp/dump && unzip -o rom.zip 2>/dev/null || true
+          BRANCH="${{ github.event.inputs.dump_branch }}"
+          mkdir -p /tmp/dump
+
+          if echo "$URL" | grep -qiE '(git|github|gitlab|gitgud)'; then
+            if [ -n "$BRANCH" ]; then
+              git clone --depth=1 -b "$BRANCH" "$URL" /tmp/dump
+            else
+              git clone --depth=1 "$URL" /tmp/dump
             fi
+          elif echo "$URL" | grep -qi 'gofile'; then
+            CID=$(echo "$URL" | grep -oE '[a-f0-9]{24,}$' || basename "$URL")
+            SERVER=$(curl -s https://api.gofile.io/servers | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['servers'][0]['name'])")
+            wget -q -O /tmp/dump.zip "https://${SERVER}.gofile.io/download/${CID}"
+            unzip -qo /tmp/dump.zip -d /tmp/dump
+            rm -f /tmp/dump.zip
           else
-            echo "Invalid URL"
-            exit 1
+            wget -q -O /tmp/dump.zip "$URL"
+            unzip -qo /tmp/dump.zip -d /tmp/dump
+            rm -f /tmp/dump.zip
           fi
-          echo "Dump files: $(find /tmp/dump -type f | wc -l)"
+
+          echo "dump_dir=/tmp/dump" >> $GITHUB_OUTPUT
+          ls -la /tmp/dump/
 
       - name: Run MegaTree
+        id: megatree
         run: |
-          python3 run-megatree.py all /tmp/dump --recovery "${{ github.event.inputs.recovery_type }}" --release /tmp/release
+          python3 -m megatree \
+            all /tmp/dump \
+            --recovery ${{ github.event.inputs.recovery_type }} \
+            --output /tmp/megatree-output \
+            --force-extract \
+            --release /tmp/releases
 
-      - name: Upload artifact
+      - name: Upload recovery tree artifact
         uses: actions/upload-artifact@v4
         with:
-          name: megatree-output
-          path: /tmp/release/*.zip
+          name: recovery-tree
+          path: /tmp/megatree-output/
+          if-no-files-found: warn
 
-      - name: Create GitHub Release
-        if: github.event.inputs.create_release == 'true'
-        run: |
-          TAG="megatree-$(date +%Y%m%d-%H%M%S)"
-          gh release create "$TAG" /tmp/release/*.zip --title "MegaTree $TAG" --notes "Generated from: ${{ github.event.inputs.dump_url }}"
+      - name: Create Release
+        if: ${{ github.event.inputs.create_release == 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: recovery-${{ github.run_number }}
+          name: "Recovery Tree Build #${{ github.run_number }}"
+          body: |
+            Recovery: `${{ github.event.inputs.recovery_type }}`
+            Dump: `${{ github.event.inputs.dump_url }}`
+          files: /tmp/releases/*.zip
+          token: ${{ secrets.GITHUB_TOKEN }}
